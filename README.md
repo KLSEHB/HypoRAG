@@ -42,6 +42,8 @@ Neutral Repair Signature                 Up to three local hypotheses
 | --- | --- |
 | [`api_pipeline/run_formal_hyporag.py`](api_pipeline/run_formal_hyporag.py) | Stage-oriented, resumable experiment from repair pairs to final predictions. |
 | [`api_pipeline/`](api_pipeline/) | Current Repair Signature, taxonomy routing, retrieval, hypothesis generation, point verification, and diagnostic helpers. |
+| [`api_pipeline/build_preference_pairs.py`](api_pipeline/build_preference_pairs.py) | Converts complete teacher-labeled M/R/E candidate pools into record-disjoint pairwise train/dev/test files. |
+| [`api_pipeline/train_reranker.py`](api_pipeline/train_reranker.py) and [`api_pipeline/evaluate_reranker.py`](api_pipeline/evaluate_reranker.py) | Preference-weighted cross-encoder training and ranking evaluation. |
 | [`prompts/point_judgment.py`](prompts/point_judgment.py) | Point-verification prompt variants, including the frozen formal prompt. |
 | [`config/taxonomy_catalog.json`](config/taxonomy_catalog.json) | Frozen 15-family taxonomy and routing definitions. |
 | [`config/excluded_records.json`](config/excluded_records.json) | Seven exceptionally long or unparseable training records excluded from the formal knowledge target. |
@@ -92,7 +94,28 @@ python api_pipeline/run_formal_hyporag.py run \
 
 The default taxonomy key is `allocation_state_representation_other_absorbs_lifetime_error_protocol_15`; the default verification prompt is `case-mapped-local-arithmetic`. Set `--chat-template-family template_kwargs` if the server requires thinking parameters through chat-template kwargs, and set `--reasoning-effort` to a supported level. See `python api_pipeline/run_formal_hyporag.py --help` for context-budget, worker, device, and decoding options. A formal run writes an experiment manifest, append-only stage outputs, Chroma indexes, `formal_validation.json`, and `final_results.json` under its output directory. Report completed and excluded records separately: a requested test pair is not automatically a valid evaluated pair.
 
-The formal run consumes a trained reranker checkpoint supplied by the user. Preference-training data and model weights are not bundled with this release, so loading the base cross-encoder instead of the tuned checkpoint changes the ranking experiment.
+## Preference reranker
+
+The reranker training objective is unchanged: the cross-encoder learns from teacher-labeled candidate preferences using a weighted pairwise loss. The release includes the pair builder, trainer, and evaluator, but not the teacher labels, training candidate pools, or trained weights. Those inputs must be generated separately for the desired training split; the Table 1 audit labels are not reranker-training labels. Each pool row has a `query` with `query_id`, repair-record `idx`, `dataset_split`, and hypothesis `mechanism_claim`, `repair_sought`, and `evidence_to_check`; each candidate has `candidate_idx` and `candidate_mre` with `mechanism_observed`, `repair_applied`, and `evidence_decisive`. Teacher rows use `pair_id` (`query_id::candidate_idx`), `status=success`, `reference_value_label` in `{0,1,2}`, and `helpfulness_type`. A pool must be fully labeled before pair construction. Assign both sides of a repair record to the same split.
+
+```bash
+python api_pipeline/build_preference_pairs.py \
+  --candidate-pools-path data/reranker_distill/candidate_pools.jsonl \
+  --teacher-labels-path data/reranker_distill/teacher_labels_canonical.jsonl \
+  --output-dir data/reranker_distill
+
+python api_pipeline/train_reranker.py \
+  --reranker_model_path /path/to/bge-reranker-v2-m3 \
+  --output_path models/reranker/tuned/preference-reranker \
+  --train_batch_size 4 --gradient_accumulation_steps 8 \
+  --epochs 3 --learning_rate 2e-5 --precision bf16
+
+python api_pipeline/evaluate_reranker.py \
+  --model_path models/reranker/tuned/preference-reranker \
+  --dataset_split test
+```
+
+Use the same held-out pools, labels, and `pairwise_test.jsonl` to compare the base and tuned cross-encoders. Training data production and the exact historical tuned checkpoint are not bundled, so these commands document the released training path rather than reproducing the paper's weights from the repository alone. Loading the base cross-encoder in the formal pipeline changes the ranking experiment.
 
 ## Retrieval diagnostic (Table 1)
 
