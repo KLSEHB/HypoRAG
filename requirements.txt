@@ -1,0 +1,12 @@
+chromadb>=0.5
+modelscope
+numpy
+openai>=1.0
+rank-bm25
+reportlab
+sentencepiece
+torch
+transformers
+tree-sitter
+tree-sitter-c
+vllm

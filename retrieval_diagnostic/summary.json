@@ -1,0 +1,72 @@
+[
+  {
+    "method": "random_code",
+    "query_unit": "function",
+    "n": 50,
+    "mean_token_jaccard": 0.043599274197711084,
+    "mean_target_callee_overlap": 0.0,
+    "label_counts": {
+      "0": 46,
+      "1": 2,
+      "2": 2
+    },
+    "transferable_match_count": 4,
+    "strict_match_count": 2
+  },
+  {
+    "method": "bm25_code",
+    "query_unit": "function",
+    "n": 50,
+    "mean_token_jaccard": 0.08993303802364576,
+    "mean_target_callee_overlap": 0.04943160374273605,
+    "label_counts": {
+      "0": 40,
+      "1": 8,
+      "2": 2
+    },
+    "transferable_match_count": 10,
+    "strict_match_count": 2
+  },
+  {
+    "method": "dense_code",
+    "query_unit": "function",
+    "n": 50,
+    "mean_token_jaccard": 0.08868275093533659,
+    "mean_target_callee_overlap": 0.0515775377893709,
+    "label_counts": {
+      "0": 44,
+      "1": 4,
+      "2": 2
+    },
+    "transferable_match_count": 6,
+    "strict_match_count": 2
+  },
+  {
+    "method": "dense_summary",
+    "query_unit": "function",
+    "n": 50,
+    "mean_token_jaccard": 0.0846475284504713,
+    "mean_target_callee_overlap": 0.03987095990142155,
+    "label_counts": {
+      "0": 40,
+      "1": 8,
+      "2": 2
+    },
+    "transferable_match_count": 10,
+    "strict_match_count": 2
+  },
+  {
+    "method": "hypothesis_latest",
+    "query_unit": "hypothesis",
+    "n": 141,
+    "mean_token_jaccard": 0.062111272294082434,
+    "mean_target_callee_overlap": 0.023505437698580718,
+    "label_counts": {
+      "0": 27,
+      "1": 67,
+      "2": 47
+    },
+    "transferable_match_count": 114,
+    "strict_match_count": 47
+  }
+]

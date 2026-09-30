@@ -1,0 +1,23 @@
+{
+  "allocation_state_representation_other_absorbs_lifetime_error_protocol_15": {
+    "title": "T0 ablation: OTHER absorbs lifetime, error, and protocol semantics",
+    "families": {
+      "PARSER_CURSOR_REMAINING_EXTENT": "A parser, decoder, protocol, or file-format cursor/offset is advanced or dereferenced without proving that the required bytes remain between the current position and a visible end boundary. This includes a pointer/offset whose associated remaining-length value is not updated consistently.",
+      "DIRECT_TRANSFER_EXTENT": "A read, write, copy, initialization, or fixed-buffer formatting operation uses an amount that can exceed a non-allocated source or destination extent.",
+      "CAPACITY_INDEX_EXTENT": "An array, table, string, collection, or fixed-capacity object is indexed, iterated, or copied beyond its declared element count or capacity.",
+      "ALLOCATION_TRANSFER_EXTENT": "A dynamically allocated or resized object has an incorrect capacity/ownership contract for a later transfer even though no arithmetic, fixed-buffer bound, or multi-dimensional layout relation is the earlier failed condition.",
+      "SIZE_OFFSET_ARITHMETIC": "Overflow, underflow, wraparound, or signed/unsigned conversion first creates a wrong size, count, offset, allocation extent, or array index. Use this when a negative or narrowed value becomes an extent/index rather than when it only violates an operation-specific domain.",
+      "STRUCTURE_SHAPE_CARDINALITY": "Relations among dimensions, shapes, parallel collections, record counts, split/stride tables, or mode-dependent layout, including whether a width/height/depth/header relation can be represented by the allocated layout.",
+      "OBJECT_VALIDITY_TYPE_LOOKUP": "Object absence, invalid type/tag, failed lookup, invalid iterator/end state, optional presence, or invalid helper result.",
+      "CONCURRENCY_ORDERING_ATOMICITY": "Missing synchronization, interleaving, atomicity, RCU, or publication/order across threads.",
+      "INFORMATION_EXPOSURE_OUTPUT_CONTROL": "Outward stale/sensitive data, logging, timing, encoding, or response control.",
+      "OTHER": "No more-specific supported fit. This includes ownership transfer, release, refcount, invalid reference, cleanup order, callback-invalidated aliases; unchecked failures, initialization, error propagation, or rollback failures; and remaining protocol/application sequence, authorization, identity/capability, configuration, or trust-boundary invariants. Do not use OTHER when a remaining specific family directly describes the earliest failed safety condition.",
+      "CYCLE_REVISIT_TERMINATION": "Recursive or graph traversal can revisit a previously visited node, pixel, object, pointer target, or state because a visited/mark/cycle invariant is absent or not propagated to the recursive call. Use only when re-entry/cycle, rather than depth alone, is the direct failure.",
+      "DEPTH_BUDGET_TERMINATION": "Recursion or repeated processing can exceed an explicit maximum depth, iteration budget, or resource budget because the threshold check is absent, off by one, or occurs too late. Use only when a depth/budget bound, rather than revisitation, is the direct failure.",
+      "DIVIDE_MODULO_NONZERO": "A division, modulus, reciprocal, or ratio operation is reached without proving its divisor/denominator is nonzero and otherwise valid. The immediate failed condition is the denominator precondition.",
+      "SHIFT_WIDTH_REPRESENTABILITY": "A shift or bit-position operation is reached without proving that the shift count is within the operand width and that the shifted result remains representable. The immediate failed condition is shift-count/representability, not general arithmetic overflow.",
+      "PARSED_VALUE_DOMAIN_VALIDATION": "A parsed, decoded, configured, or externally supplied scalar is used as a mode, enum, dimension class, limit, or other semantic parameter without proving it belongs to the required allowed domain. Do not use for direct arithmetic overflow, divide/modulus, or shift preconditions."
+    },
+    "precedence": "Apply allocation and state rules first. For numeric semantics, use SIZE_OFFSET_ARITHMETIC when conversion/sign creates a wrong extent/index, DIVIDE_MODULO_NONZERO for denominator preconditions, SHIFT_WIDTH_REPRESENTABILITY for shift preconditions, and PARSED_VALUE_DOMAIN_VALIDATION for the remaining semantic range/enum faults. Use OTHER for the removed lifetime, error, and protocol/trust conditions unless a remaining specific family is the earlier failed condition."
+  }
+}

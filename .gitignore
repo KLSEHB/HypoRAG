@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.env.*
+data/
+models/
+chromadb/
+outputs/
+logs/
+*.log
+*.safetensors
+*.pt
+*.bin

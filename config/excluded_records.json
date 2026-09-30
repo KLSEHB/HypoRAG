@@ -1,0 +1,11 @@
+{
+  "excluded_records": [
+    {"idx": 863, "reason": "input exceeds supported context"},
+    {"idx": 1438, "reason": "repeated output schema failure"},
+    {"idx": 1891, "reason": "input exceeds supported context"},
+    {"idx": 1965, "reason": "repeated output schema failure"},
+    {"idx": 2724, "reason": "input exceeds supported context"},
+    {"idx": 2902, "reason": "input exceeds supported context"},
+    {"idx": 3142, "reason": "repeated output schema failure"}
+  ]
+}
