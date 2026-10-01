@@ -52,7 +52,7 @@ Neutral Repair Signature                 Up to three local hypotheses
 | [`scripts/`](scripts/) | Diagnostic recomputation, release validation, data export, and appendix generation. |
 | [`appendix.pdf`](appendix.pdf) | Supplementary implementation, evaluation, and annotation details. |
 
-The release does not bundle PrimeVul source records, generated full-run knowledge, trained reranker weights, or the complete set of online hypotheses. The **141 diagnostic hypotheses and their retrieval/audit records are included** so that the retrieval comparison remains inspectable.
+The release **includes 141 diagnostic hypotheses and their retrieval/audit records** so that the retrieval comparison remains inspectable.
 
 ## Data and model prerequisites
 
