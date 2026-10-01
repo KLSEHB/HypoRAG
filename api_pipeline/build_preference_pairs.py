@@ -30,6 +30,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--candidate-pools-path", type=Path, required=True)
     parser.add_argument("--teacher-labels-path", type=Path, required=True)
+    parser.add_argument("--query-group-manifest-path", type=Path)
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
 
@@ -37,6 +38,21 @@ def main() -> None:
     labels = read_jsonl(args.teacher_labels_path)
     if not pools:
         raise ValueError("Candidate pool file is empty")
+    if args.query_group_manifest_path:
+        groups = read_jsonl(args.query_group_manifest_path)
+        if not groups or any(row.get("status") != "complete" for row in groups):
+            raise ValueError("Every selected query group must be complete")
+        groups_by_id = {str(row["query_id"]): row for row in groups}
+        if len(groups_by_id) != len(groups):
+            raise ValueError("Duplicate selected query groups")
+        pools = [pool for pool in pools if str(pool["query"]["query_id"]) in groups_by_id]
+        if len(pools) != len(groups):
+            raise ValueError("Some selected query groups have no candidate pool")
+        labels = [
+            label for label in labels
+            if str(label.get("query_id")) in groups_by_id
+            and label.get("prompt_hash") == groups_by_id[str(label["query_id"])]["prompt_hash"]
+        ]
     successful: dict[str, dict] = {}
     for label in labels:
         if label.get("status") != "success":
@@ -59,6 +75,7 @@ def main() -> None:
 
     pairwise = build_pairwise_rows(pools, list(successful.values()))
     args.output_dir.mkdir(parents=True, exist_ok=True)
+    write_jsonl(args.output_dir / "teacher_labels_canonical.jsonl", list(successful.values()))
     for split, rows in pairwise.items():
         write_jsonl(args.output_dir / f"pairwise_{split}.jsonl", rows)
     print(json.dumps({split: len(rows) for split, rows in pairwise.items()}))

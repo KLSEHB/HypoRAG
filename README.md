@@ -43,6 +43,7 @@ Neutral Repair Signature                 Up to three local hypotheses
 | [`api_pipeline/run_formal_hyporag.py`](api_pipeline/run_formal_hyporag.py) | Stage-oriented, resumable experiment from repair pairs to final predictions. |
 | [`api_pipeline/`](api_pipeline/) | Current Repair Signature, taxonomy routing, retrieval, hypothesis generation, point verification, and diagnostic helpers. |
 | [`api_pipeline/build_preference_pairs.py`](api_pipeline/build_preference_pairs.py) | Converts complete teacher-labeled M/R/E candidate pools into record-disjoint pairwise train/dev/test files. |
+| [`api_pipeline/build_reranker_distill.py`](api_pipeline/build_reranker_distill.py) and [`prompts/reranker_preference_labeling.py`](prompts/reranker_preference_labeling.py) | Current-taxonomy training candidate pools, seeded Query selection, resumable six-field Teacher labeling, and the frozen utility prompt. |
 | [`api_pipeline/train_reranker.py`](api_pipeline/train_reranker.py) and [`api_pipeline/evaluate_reranker.py`](api_pipeline/evaluate_reranker.py) | Preference-weighted cross-encoder training and ranking evaluation. |
 | [`prompts/point_judgment.py`](prompts/point_judgment.py) | Point-verification prompt variants, including the frozen formal prompt. |
 | [`config/taxonomy_catalog.json`](config/taxonomy_catalog.json) | Frozen 15-family taxonomy and routing definitions. |
@@ -70,7 +71,7 @@ python scripts/recompute_retrieval_diagnostic.py
 
 ## Run the formal pipeline
 
-The formal runner exposes the stages `prepare`, `signatures`, `retrieval-package`, `guidance-package`, `index`, `s0`, `retrieve`, `s5`, `aggregate`, `validate`, and `summarize`. `run` executes them in order. Knowledge generation and test-side hypothesis generation are independent until retrieval, so a scheduler can run those stages separately. Stage JSONL outputs retain successful tasks; restarting a stage in the same output directory fills missing or failed tasks. Use a **new output directory** when changing the model, taxonomy, prompt, inputs, or decoding configuration; `prepare` rejects a conflicting experiment manifest.
+The formal runner exposes the stages `prepare`, `signatures`, `retrieval-package`, `guidance-package`, `index`, `s0`, `train-s0`, `retrieve`, `s5`, `aggregate`, `validate`, and `summarize`. `run` executes the online stages in order; `train-s0` is explicit because generating training-side hypotheses is only needed for preference-data construction. Knowledge generation and test-side hypothesis generation are independent until retrieval, so a scheduler can run those stages separately. Stage JSONL outputs retain successful tasks; restarting a stage in the same output directory fills missing or failed tasks. Use a **new output directory** when changing the model, taxonomy, prompt, inputs, or decoding configuration; `prepare` rejects a conflicting experiment manifest.
 
 After obtaining the benchmark, encoder, trained reranker, and an inference endpoint:
 
@@ -96,26 +97,57 @@ The default taxonomy key is `allocation_state_representation_other_absorbs_lifet
 
 ## Preference reranker
 
-The reranker training objective is unchanged: the cross-encoder learns from teacher-labeled candidate preferences using a weighted pairwise loss. The release includes the pair builder, trainer, and evaluator, but not the teacher labels, training candidate pools, or trained weights. Those inputs must be generated separately for the desired training split; the Table 1 audit labels are not reranker-training labels. Each pool row has a `query` with `query_id`, repair-record `idx`, `dataset_split`, and hypothesis `mechanism_claim`, `repair_sought`, and `evidence_to_check`; each candidate has `candidate_idx` and `candidate_mre` with `mechanism_observed`, `repair_applied`, and `evidence_decisive`. Teacher rows use `pair_id` (`query_id::candidate_idx`), `status=success`, `reference_value_label` in `{0,1,2}`, and `helpfulness_type`. A pool must be fully labeled before pair construction. Assign both sides of a repair record to the same split.
+The reranker training objective is unchanged: the cross-encoder learns from teacher-labeled candidate preferences using a weighted pairwise loss. Training-side S0 uses the same frozen 15-family taxonomy and `recall_v2` prompt as the formal run. Candidate pools use three M/R/E routes, rank-stratified retrieved cases, a same-source case when available, and cross-family negatives. The Teacher sees **only** the three hypothesis and three knowledge text fields, not either family label, full code, or patch. Its system prompt retains the original frozen hash `13c80f3ddbbf`; the current M/R/E field names are mapped into that six-field template. Query groups are selected at 50% with seed 42, and failed labels resume without repeating successes. Both sides of a repair record share one train/dev/test split.
+
+After `prepare`, `train-s0` can run independently of `signatures`, `retrieval-package`, `guidance-package`, and `index`; candidate-pool construction waits for both chains. Use one formal output directory and the same endpoint/model options for `train-s0`. The Teacher's thinking mode defaults to disabled, matching the historical preference-labeling setting.
 
 ```bash
+python api_pipeline/run_formal_hyporag.py train-s0 \
+  --output-dir data/formal_hyporag_run \
+  --train-path data/raw/primevul_train_merged.jsonl \
+  --test-path data/raw/primevul_test_merged.jsonl \
+  --api-base http://localhost:8000/v1 --model-name YOUR_SERVED_MODEL \
+  --s0-prompt-version recall_v2
+
+python api_pipeline/build_reranker_distill.py build-pools \
+  --formal-output-dir data/formal_hyporag_run \
+  --output-dir data/formal_hyporag_run/reranker_distill \
+  --train-path data/raw/primevul_train_merged.jsonl \
+  --embedding-model-path /path/to/bge-code-v1
+
+python api_pipeline/build_reranker_distill.py select-groups \
+  --output-dir data/formal_hyporag_run/reranker_distill \
+  --selection-ratio 0.5 --selection-seed 42
+
+python api_pipeline/build_reranker_distill.py label-groups \
+  --output-dir data/formal_hyporag_run/reranker_distill \
+  --api-base http://localhost:8000/v1 --model-name YOUR_SERVED_MODEL
+
 python api_pipeline/build_preference_pairs.py \
-  --candidate-pools-path data/reranker_distill/candidate_pools.jsonl \
-  --teacher-labels-path data/reranker_distill/teacher_labels_canonical.jsonl \
-  --output-dir data/reranker_distill
+  --candidate-pools-path data/formal_hyporag_run/reranker_distill/candidate_pools.jsonl \
+  --teacher-labels-path data/formal_hyporag_run/reranker_distill/teacher_labels.jsonl \
+  --query-group-manifest-path data/formal_hyporag_run/reranker_distill/query_group_manifest.jsonl \
+  --output-dir data/formal_hyporag_run/reranker_distill
 
 python api_pipeline/train_reranker.py \
   --reranker_model_path /path/to/bge-reranker-v2-m3 \
+  --train_path data/formal_hyporag_run/reranker_distill/pairwise_train.jsonl \
+  --eval_path data/formal_hyporag_run/reranker_distill/pairwise_dev.jsonl \
+  --candidate_pools_path data/formal_hyporag_run/reranker_distill/candidate_pools.jsonl \
+  --teacher_labels_path data/formal_hyporag_run/reranker_distill/teacher_labels_canonical.jsonl \
   --output_path models/reranker/tuned/preference-reranker \
   --train_batch_size 4 --gradient_accumulation_steps 8 \
   --epochs 3 --learning_rate 2e-5 --precision bf16
 
 python api_pipeline/evaluate_reranker.py \
   --model_path models/reranker/tuned/preference-reranker \
+  --pairwise_path data/formal_hyporag_run/reranker_distill/pairwise_test.jsonl \
+  --candidate_pools_path data/formal_hyporag_run/reranker_distill/candidate_pools.jsonl \
+  --teacher_labels_path data/formal_hyporag_run/reranker_distill/teacher_labels_canonical.jsonl \
   --dataset_split test
 ```
 
-Use the same held-out pools, labels, and `pairwise_test.jsonl` to compare the base and tuned cross-encoders. Training data production and the exact historical tuned checkpoint are not bundled, so these commands document the released training path rather than reproducing the paper's weights from the repository alone. Loading the base cross-encoder in the formal pipeline changes the ranking experiment.
+Use the same held-out pools, labels, and `pairwise_test.jsonl` to compare the base and tuned cross-encoders. The scripts regenerate preference data, but the exact historical Teacher outputs and tuned weights are not bundled; a fresh run requires the benchmark, models, and inference endpoint and may produce a different checkpoint. The Table 1 audit labels are not reranker-training labels. Loading the base cross-encoder in the formal pipeline changes the ranking experiment.
 
 ## Retrieval diagnostic (Table 1)
 

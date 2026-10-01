@@ -519,6 +519,37 @@ def generate_s0(args: argparse.Namespace) -> None:
                 lambda value, task: validate_hypotheses(value, task["code"], allowed, args.s0_prompt_version))
 
 
+def generate_train_s0(args: argparse.Namespace) -> None:
+    """Generate current-taxonomy hypotheses for preference-data queries."""
+    taxonomy = taxonomy_definition(args)
+    allowed = set(taxonomy["families"])
+    system = joint_system(taxonomy, "focused", args.s0_prompt_version)
+    tasks = []
+    for record in selected_train(args):
+        for side, field in (("vuln", "func_vuln"), ("safe", "func_safe")):
+            code = str(record[field])
+            messages = [
+                {"role": "system", "content": system},
+                {"role": "user", "content": json.dumps({
+                    "idx": int(record["idx"]), "side": side, "function": code,
+                }, ensure_ascii=False)},
+            ]
+            tasks.append({
+                "key": f"train-s0:{int(record['idx'])}:{side}",
+                "idx": int(record["idx"]), "side": side, "code": code,
+                "messages": messages, "input_hash": stable_hash(messages),
+            })
+    task_runner(
+        args, "train_s0", stage_output_path(
+            args, "train_s0", args.output_dir / "reranker_distill" / "s0_train_hypotheses.jsonl",
+        ),
+        tasks,
+        lambda value, task: validate_hypotheses(
+            value, task["code"], allowed, args.s0_prompt_version,
+        ),
+    )
+
+
 def knowledge_units(args: argparse.Namespace) -> dict[int, dict[str, Any]]:
     train_by_idx = {int(row["idx"]): row for row in selected_train(args)}
     signatures = signature_outputs(args)
@@ -977,7 +1008,7 @@ def summarize(args: argparse.Namespace) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("prepare", "signatures", "retrieval-package", "guidance-package", "index", "s0", "retrieve", "s5", "aggregate", "validate", "summarize", "run"))
+    parser.add_argument("command", choices=("prepare", "signatures", "retrieval-package", "guidance-package", "index", "s0", "train-s0", "retrieve", "s5", "aggregate", "validate", "summarize", "run"))
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--train-path", type=Path, default=ROOT / "data" / "raw" / "primevul_train_merged.jsonl")
     parser.add_argument("--test-path", type=Path, default=ROOT / "data" / "raw" / "primevul_test_merged.jsonl")
@@ -1018,11 +1049,11 @@ def main() -> None:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     steps: list[tuple[str, Callable[[argparse.Namespace], None]]] = [
         ("prepare", prepare), ("signatures", generate_signatures), ("retrieval-package", generate_retrieval_package),
-        ("guidance-package", generate_guidance_package), ("index", build_indices), ("s0", generate_s0), ("retrieve", retrieve_and_rerank),
+        ("guidance-package", generate_guidance_package), ("index", build_indices), ("s0", generate_s0), ("train-s0", generate_train_s0), ("retrieve", retrieve_and_rerank),
         ("s5", verify_points), ("aggregate", aggregate), ("validate", validate_formal), ("summarize", summarize),
     ]
     for name, function in steps:
-        if args.command in {"run", name}:
+        if args.command == name or (args.command == "run" and name != "train-s0"):
             function(args)
 
 

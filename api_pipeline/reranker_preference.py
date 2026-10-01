@@ -1,6 +1,7 @@
 """Preference-data helpers for the current M/R/E reranker interface."""
 
 import math
+import re
 from typing import Any, Iterable, Mapping, Sequence
 
 
@@ -30,6 +31,37 @@ def latest_successful_labels(rows: Iterable[dict[str, Any]]) -> dict[str, dict[s
         if row.get("status") == "success":
             latest[str(row["pair_id"])] = row
     return latest
+
+
+def parse_teacher_output(raw_text: str) -> dict[str, Any]:
+    from api_pipeline.common import extract_json_object
+
+    parsed = extract_json_object(raw_text)
+    label = int(parsed["reference_value_label"])
+    direction = str(parsed["helpfulness_type"]).strip().lower().replace("-", "_")
+    reason = str(parsed["reason"]).strip()
+    if label not in (0, 1, 2):
+        raise ValueError(f"Invalid reference_value_label: {label}")
+    if direction not in ("confirm", "rule_out", "both", "none"):
+        raise ValueError(f"Invalid helpfulness_type: {direction}")
+    if (label == 0) != (direction == "none"):
+        raise ValueError("label 0 requires none; labels 1/2 require a direction")
+    if not reason:
+        raise ValueError("reason must not be empty")
+    boundary_pattern = re.compile(
+        r"\b(proves?)\s+(that\s+)?(the\s+)?(target|query)(\s+code)?\s+"
+        r"(is|has)\s+(vulnerable|safe|a vulnerability)"
+        r"|\b(definitely|clearly)\s+needs?\s+(the\s+)?(fix|repair)"
+        r"|\b(target|query)\s+(is|has)\s+(vulnerable|safe|a vulnerability)",
+        flags=re.IGNORECASE,
+    )
+    if boundary_pattern.search(reason):
+        raise ValueError("reason crosses the reference-utility information boundary")
+    return {
+        "reference_value_label": label,
+        "helpfulness_type": direction,
+        "reason": reason,
+    }
 
 
 def ndcg(relevances: Sequence[int], k: int) -> float:
